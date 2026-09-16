@@ -60,18 +60,13 @@ private:
       transitionMs = BANGER_TRANSITION_MS;
     }
 
-    String request = "win&TT=";
-    request += transitionMs;
-
-    request += "&PL=";
-    request += preset;
-
-    // Uses WLED's own HTTP API parser internally.
-    handleSet(nullptr, request, false);
-
-    // handleSet changes state but doesn't perform the final
-    // interface/state update for this internal call.
-    stateUpdated(CALL_MODE_BUTTON_PRESET);
+    // Use WLED's native transition engine directly. The transition is
+    // marked one-shot so WLED restores its normal configured transition
+    // after this preset change. applyPreset() queues the preset through
+    // WLED's normal asynchronous preset loader.
+    jsonTransitionOnce = true;
+    strip.setTransition(transitionMs);
+    applyPreset(preset, CALL_MODE_BUTTON_PRESET);
   }
 
 
@@ -491,18 +486,16 @@ private:
   // LIVE CONTROLLER EXTRAS
   // =====================================================
 
-  void cycleMapping(int direction) {
-#ifndef WLED_DISABLE_2D
+  void cycleEffect(int direction) {
     Segment& seg = strip.getMainSegment();
-    constexpr int MAP_COUNT = 5; // Pixels, Bar, Arc, Corner, Pinwheel
-    int next = ((int)seg.map1D2D + (direction >= 0 ? 1 : -1) + MAP_COUNT) % MAP_COUNT;
-    if (next != seg.map1D2D) {
-      seg.map1D2D = (uint8_t)next;
+    int modeCount = (int)strip.getModeCount();
+    if (modeCount <= 0) return;
+
+    int next = ((int)seg.mode + (direction >= 0 ? 1 : -1) + modeCount) % modeCount;
+    if (next != seg.mode) {
+      seg.setMode((uint8_t)next, true);
       commitChange();
     }
-#else
-    (void)direction;
-#endif
   }
 
   void randomizeLiveParameters() {
@@ -701,11 +694,11 @@ private:
 
 
     // ===================================================
-    // 2D MAPPING CYCLE / RANDOMIZE / STICK RESETS
+    // EFFECT CYCLE / RANDOMIZE / STICK RESETS
     // ===================================================
 
-    if (type == "MAP") {
-      cycleMapping(value);
+    if (type == "FX") {
+      cycleEffect(value);
       return;
     }
 
